@@ -2,6 +2,8 @@
  * TODO:
  * - Figure out how to avoid recreating llama_context each inference.
  * - Implement web server options.
+ * - Remove thread and queue and just use a mutex (we have to hold up each web request anyway to
+ *   return a response).
  */
 
 #include "web_server.hpp"
