@@ -27,11 +27,14 @@ obj:
 	$(info Creating directory: obj/)
 	mkdir obj
 
-obj/web_server.o: web_server.cpp cpp-httplib/httplib.h
-	$(CXX) -c -o $@ $< $(HTTP_CXXFLAGS)
+obj/%.o:	util/%.cpp util/%.hpp
+	$(CXX) -c -o $@ $< $(CXXFLAGS) -I. -std=c++17
 
-bin/llava-server: obj/web_server.o
-	$(CXX) -Illama.cpp -Illama.cpp/common $(CXXFLAGS) -o $@ $(LDFLAGS) -Wno-cast-qual $< $(HTTP_ZLIB_SUPPORT)
+obj/web_server.o: web_server.cpp cpp-httplib/httplib.h
+	$(CXX) -c -o $@ $< $(HTTP_CXXFLAGS) -I.
+
+bin/llava-server: obj/web_server.o obj/command_line.o obj/config.o obj/format.o
+	$(CXX) -Illama.cpp -Illama.cpp/common $(CXXFLAGS) -o $@ $(LDFLAGS) -Wno-cast-qual $(HTTP_ZLIB_SUPPORT) obj/web_server.o obj/command_line.o obj/config.o obj/format.o
 
 #llava-server: llama.cpp/examples/llava/llava.cpp llama.cpp/examples/llava/llava-utils.h llama.cpp/examples/llava/clip.cpp llama.cpp/examples/llava/clip.h llama.cpp/common/stb_image.h llama.cpp/ggml.o llama.cpp/llama.o $(COMMON_DEPS) $(OBJS)
 #	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) -Wno-cast-qual

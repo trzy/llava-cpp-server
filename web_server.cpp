@@ -7,10 +7,11 @@
 
 #include "cpp-httplib/httplib.h"
 
+#include "util/command_line.hpp"
+
 #include <fstream>
 #include <iostream>
 using namespace httplib;
-using namespace std;
 
 const char *html = R"(
 <form id="formElem">
@@ -80,7 +81,23 @@ std::string log(const Request &req, const Response &res) {
   return s;
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+  util::config::Node config("Global");
+
+  {
+    using namespace util::command_line;
+    std::vector<option_definition> options
+    {
+      switch_option({{ "--help" }}, {{ "-?", "-h", "-help" }}, "ShowHelp", "Print this help text."),
+      default_valued_option("--port", string("name"), "COM3", "port", "Serial port to connect on."),
+    };
+    auto state = parse_command_line(&config, options, argc, argv);
+    if (state.exit)
+    {
+      return state.parse_error ? 1 : 0;
+    }
+  }
+
   Server svr;
 
   svr.Get("/", [](const Request & /*req*/, Response &res) {
@@ -90,17 +107,17 @@ int main(void) {
   svr.Post("/post", [](const Request &req, Response &res) {
     auto text_file = req.get_header_value("text_file");
 
-    cout << "text length: " << text_file.length() << endl
-         << "text: " << text_file << endl
-         << "is_multipart_form: " << req.is_multipart_form_data() << endl;
+    std::cout << "text length: " << text_file.length() << std::endl
+         << "text: " << text_file << std::endl
+         << "is_multipart_form: " << req.is_multipart_form_data() << std::endl;
 
     MultipartFormData data = req.get_file_value("text_file");
-    cout << "name: " << data.name << endl
-         << "content: " << data.content << endl;
+    std::cout << "name: " << data.name << std::endl
+         << "content: " << data.content << std::endl;
 
     MultipartFormData img_data = req.get_file_value("image_file");
-    cout << "name: " << img_data.name << endl
-         << "size: " << img_data.content.length() << endl;
+    std::cout << "name: " << img_data.name << std::endl
+         << "size: " << img_data.content.length() << std::endl;
 
     FILE *fp = fopen("test.jpg", "wb");
     const uint8_t *image_bytes = reinterpret_cast<const uint8_t *>(img_data.content.c_str());
