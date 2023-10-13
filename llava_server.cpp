@@ -1,3 +1,9 @@
+/*
+ * TODO:
+ * - Figure out how to avoid recreating llama_context each inference.
+ * - Implement web server options.
+ */
+
 #include "web_server.hpp"
 
 #include "llama.cpp/examples/llava/clip.h"
