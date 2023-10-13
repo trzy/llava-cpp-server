@@ -7,8 +7,6 @@
 
 #include "cpp-httplib/httplib.h"
 
-#include "util/command_line.hpp"
-
 #include <fstream>
 #include <iostream>
 using namespace httplib;
@@ -81,23 +79,7 @@ std::string log(const Request &req, const Response &res) {
   return s;
 }
 
-int main(int argc, char **argv) {
-  util::config::Node config("Global");
-
-  {
-    using namespace util::command_line;
-    std::vector<option_definition> options
-    {
-      switch_option({{ "--help" }}, {{ "-?", "-h", "-help" }}, "ShowHelp", "Print this help text."),
-      default_valued_option("--port", string("name"), "COM3", "port", "Serial port to connect on."),
-    };
-    auto state = parse_command_line(&config, options, argc, argv);
-    if (state.exit)
-    {
-      return state.parse_error ? 1 : 0;
-    }
-  }
-
+void run_web_server(const std::string host, int port) {
   Server svr;
 
   svr.Get("/", [](const Request & /*req*/, Response &res) {
@@ -131,5 +113,5 @@ int main(int argc, char **argv) {
     printf("%s", log(req, res).c_str());
   });
 
-  svr.listen("localhost", 8080);
+  svr.listen(host, port);
 }
