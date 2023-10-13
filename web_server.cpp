@@ -5,10 +5,13 @@
 //  MIT License
 //
 
+#include "llava_request.hpp" 
+
 #include "cpp-httplib/httplib.h"
 
 #include <fstream>
 #include <iostream>
+#include <memory>
 using namespace httplib;
 
 const char *html = R"(
@@ -79,14 +82,15 @@ std::string log(const Request &req, const Response &res) {
   return s;
 }
 
-void run_web_server(const std::string host, int port) {
+void run_web_server(const std::string host, int port, std::function<void(const llava_request &)> hand_off_request) 
+{
   Server svr;
 
   svr.Get("/", [](const Request & /*req*/, Response &res) {
     res.set_content(html, "text/html");
   });
 
-  svr.Post("/post", [](const Request &req, Response &res) {
+  svr.Post("/post", [&hand_off_request](const Request &req, Response &res) {
     auto text_file = req.get_header_value("text_file");
 
     std::cout << "text length: " << text_file.length() << std::endl
@@ -107,6 +111,17 @@ void run_web_server(const std::string host, int port) {
     fclose(fp);
 
     res.set_content("done", "text/plain");
+
+    // Hand off to main thread
+    size_t image_buffer_size = img_data.content.length();
+    auto image_buffer = std::make_unique<uint8_t[]>(image_buffer_size);
+    memcpy(image_buffer.get(), image_bytes, image_buffer_size);
+    llava_request request = {
+      .image = std::move(image_buffer),
+      .image_buffer_size = image_buffer_size,
+      .prompt = data.content
+    };
+    hand_off_request(request);
   });
 
   svr.set_logger([](const Request &req, const Response &res) {

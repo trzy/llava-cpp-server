@@ -13,7 +13,7 @@ LLAMA_DEPS = $(foreach file,$(COMMON_DEPS),llama.cpp/$(file))
 # cpp-httplib
 ###############################################################################
 
-HTTP_CXXFLAGS = -O2 -std=c++11 -I.. -Wall -Wextra -pthread
+HTTP_CXXFLAGS = -O2 -std=c++17 -I.. -Wall -Wextra -pthread
 HTTP_ZLIB_SUPPORT = -DCPPHTTPLIB_ZLIB_SUPPORT -lz
 
 
@@ -44,7 +44,7 @@ obj/%.o:	llama.cpp/examples/llava/%.cpp
 obj/llava_server.o:	llava_server.cpp llama.cpp/examples/llava/llava-utils.h llama.cpp/examples/llava/clip.h llama.cpp/common/stb_image.h
 	$(CXX) -Illama.cpp -Illama.cpp/common -c -o $@ $< $(CXXFLAGS) -I. -std=c++17
 
-obj/web_server.o: web_server.cpp cpp-httplib/httplib.h
+obj/web_server.o: web_server.cpp web_server.hpp cpp-httplib/httplib.h
 	$(CXX) -c -o $@ $< $(HTTP_CXXFLAGS) -I.
 
 #
