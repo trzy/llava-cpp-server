@@ -1,18 +1,34 @@
 //
-//  sample.cc
+//  upload.cc
 //
 //  Copyright (c) 2019 Yuji Hirose. All rights reserved.
 //  MIT License
 //
 
-#include <chrono>
-#include <cstdio>
 #include "cpp-httplib/httplib.h"
 
-#define SERVER_CERT_FILE "./cert.pem"
-#define SERVER_PRIVATE_KEY_FILE "./key.pem"
-
+#include <fstream>
+#include <iostream>
 using namespace httplib;
+using namespace std;
+
+const char *html = R"(
+<form id="formElem">
+  <input type="file" name="image_file" accept="image/*">
+  <input type="text" name="text_file" accept="text/*">
+  <input type="submit">
+</form>
+<script>
+  formElem.onsubmit = async (e) => {
+    e.preventDefault();
+    let res = await fetch('/post', {
+      method: 'POST',
+      body: new FormData(formElem)
+    });
+    console.log(await res.text());
+  };
+</script>
+)";
 
 std::string dump_headers(const Headers &headers) {
   std::string s;
@@ -65,42 +81,33 @@ std::string log(const Request &req, const Response &res) {
 }
 
 int main(void) {
-#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
-  SSLServer svr(SERVER_CERT_FILE, SERVER_PRIVATE_KEY_FILE);
-#else
   Server svr;
-#endif
 
-  if (!svr.is_valid()) {
-    printf("server has an error...\n");
-    return -1;
-  }
-
-  svr.Get("/", [=](const Request & /*req*/, Response &res) {
-    res.set_redirect("/hi");
+  svr.Get("/", [](const Request & /*req*/, Response &res) {
+    res.set_content(html, "text/html");
   });
 
-  svr.Get("/hi", [](const Request & /*req*/, Response &res) {
-    res.set_content("Hello World!\n", "text/plain");
-  });
+  svr.Post("/post", [](const Request &req, Response &res) {
+    auto text_file = req.get_header_value("text_file");
 
-  svr.Get("/slow", [](const Request & /*req*/, Response &res) {
-    std::this_thread::sleep_for(std::chrono::seconds(2));
-    res.set_content("Slow...\n", "text/plain");
-  });
+    cout << "text length: " << text_file.length() << endl
+         << "text: " << text_file << endl
+         << "is_multipart_form: " << req.is_multipart_form_data() << endl;
 
-  svr.Get("/dump", [](const Request &req, Response &res) {
-    res.set_content(dump_headers(req.headers), "text/plain");
-  });
+    MultipartFormData data = req.get_file_value("text_file");
+    cout << "name: " << data.name << endl
+         << "content: " << data.content << endl;
 
-  svr.Get("/stop",
-          [&](const Request & /*req*/, Response & /*res*/) { svr.stop(); });
+    MultipartFormData img_data = req.get_file_value("image_file");
+    cout << "name: " << img_data.name << endl
+         << "size: " << img_data.content.length() << endl;
 
-  svr.set_error_handler([](const Request & /*req*/, Response &res) {
-    const char *fmt = "<p>Error Status: <span style='color:red;'>%d</span></p>";
-    char buf[BUFSIZ];
-    snprintf(buf, sizeof(buf), fmt, res.status);
-    res.set_content(buf, "text/html");
+    FILE *fp = fopen("test.jpg", "wb");
+    const uint8_t *image_bytes = reinterpret_cast<const uint8_t *>(img_data.content.c_str());
+    fwrite(image_bytes, sizeof(uint8_t), img_data.content.length(), fp);
+    fclose(fp);
+
+    res.set_content("done", "text/plain");
   });
 
   svr.set_logger([](const Request &req, const Response &res) {
@@ -108,6 +115,4 @@ int main(void) {
   });
 
   svr.listen("localhost", 8080);
-
-  return 0;
 }

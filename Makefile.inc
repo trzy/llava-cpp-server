@@ -28,10 +28,10 @@ obj:
 	mkdir obj
 
 obj/web_server.o: web_server.cpp cpp-httplib/httplib.h
-	$(CXX) -c -o $@ $< $(HTTP_CXXFLAGS) $(HTTP_ZLIB_SUPPORT)
+	$(CXX) -c -o $@ $< $(HTTP_CXXFLAGS)
 
 bin/llava-server: obj/web_server.o
-	$(CXX) -Illama.cpp -Illama.cpp/common $(CXXFLAGS) -o $@ $(LDFLAGS) -Wno-cast-qual $< -lz
+	$(CXX) -Illama.cpp -Illama.cpp/common $(CXXFLAGS) -o $@ $(LDFLAGS) -Wno-cast-qual $< $(HTTP_ZLIB_SUPPORT)
 
 #llava-server: llama.cpp/examples/llava/llava.cpp llama.cpp/examples/llava/llava-utils.h llama.cpp/examples/llava/clip.cpp llama.cpp/examples/llava/clip.h llama.cpp/common/stb_image.h llama.cpp/ggml.o llama.cpp/llama.o $(COMMON_DEPS) $(OBJS)
 #	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS) -Wno-cast-qual
