@@ -39,8 +39,16 @@ static bool clip_image_load_from_memory(std::shared_ptr<uint8_t[]> image_buffer,
     return true;
 }
 
-static void perform_inference(gpt_params params, llama_context *ctx_llama, clip_ctx *ctx_clip, std::shared_ptr<uint8_t[]> image_buffer, size_t image_buffer_size, const std::string prompt)
+static void perform_inference(gpt_params params, llama_model *model, const llama_context_params &ctx_params, clip_ctx *ctx_clip, std::shared_ptr<uint8_t[]> image_buffer, size_t image_buffer_size, const std::string prompt)
 {
+    // create a fresh llama context each time to reset state
+    llama_context * ctx_llama = llama_new_context_with_model(model, ctx_params);
+    if (ctx_llama == NULL)
+    {
+        fprintf(stderr , "%s: error: failed to create the llama_context\n" , __func__);
+        return;
+    }
+
     // load and preprocess the image
     clip_image_u8 img;
     clip_image_f32 img_res;
@@ -126,10 +134,11 @@ static void perform_inference(gpt_params params, llama_context *ctx_llama, clip_
 
     llama_print_timings(ctx_llama);
 
+    llama_free(ctx_llama);
     free(image_embd);
 }
 
-static void run_llava_thread(gpt_params params, llama_context *ctx_llama, clip_ctx *ctx_clip)
+[[noreturn]] static void run_llava_thread(gpt_params params, llama_model *model, const llama_context_params &ctx_params, clip_ctx *ctx_clip)
 {
     while (true)
     {
@@ -144,7 +153,7 @@ static void run_llava_thread(gpt_params params, llama_context *ctx_llama, clip_c
 
         // Perform inference
         std::cout << "Prompt: " << request.prompt << std::endl;
-        perform_inference(params, ctx_llama, ctx_clip, request.image, request.image_buffer_size, request.prompt);
+        perform_inference(params, model, ctx_params, ctx_clip, request.image, request.image_buffer_size, request.prompt);
     }
 }
 
@@ -185,7 +194,6 @@ int main(int argc, char ** argv)
     }
 
     const char * clip_path = params.mmproj.c_str();
-    //const char * img_path = params.image.c_str();
 
     auto ctx_clip = clip_model_load(clip_path, /*verbosity=*/ 1);
 
@@ -205,16 +213,8 @@ int main(int argc, char ** argv)
     ctx_params.n_threads       = params.n_threads;
     ctx_params.n_threads_batch = params.n_threads_batch == -1 ? params.n_threads : params.n_threads_batch;
 
-    llama_context * ctx_llama = llama_new_context_with_model(model, ctx_params);
-
-    if (ctx_llama == NULL)
-    {
-        fprintf(stderr , "%s: error: failed to create the llama_context\n" , __func__);
-        return 1;
-    }
-
     // Start LLaVa thread to process incoming requests
-    std::thread llava_thread(run_llava_thread, params, ctx_llama, ctx_clip);
+    std::thread llava_thread(run_llava_thread, params, model, ctx_params, ctx_clip);
 
     // Serve forever
     run_web_server("localhost", 8080, [](const llava_request &request) { push_to_work_queue(request); });

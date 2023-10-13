@@ -1,3 +1,7 @@
 .vscode/
 bin/
 obj/
+/*.metal
+*.gguf
+*.jpg
+*.png
