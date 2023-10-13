@@ -5,7 +5,6 @@
 #include "llama.cpp/common/common.h"
 #include "llama.cpp/llama.h"
 
-//#define STB_IMAGE_IMPLEMENTATION
 #include "llama.cpp/common/stb_image.h"
 
 #include <cstdio>
@@ -82,9 +81,6 @@ static void perform_inference(gpt_params params, llama_model *model, const llama
         return;
     }
     const int64_t t_img_enc_end_us = ggml_time_us();
-
-    // we get the embeddings, free up the memory required for CLIP
-    //clip_free(ctx_clip);
 
     // make sure that the correct mmproj was used, i.e., compare apples to apples
     int n_llama_embd = llama_n_embd(llama_get_model(ctx_llama));
