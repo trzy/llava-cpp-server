@@ -10,7 +10,6 @@
 #include "llama.cpp/examples/llava/llava-utils.h"
 #include "llama.cpp/common/common.h"
 #include "llama.cpp/llama.h"
-
 #include "llama.cpp/common/stb_image.h"
 
 #include <cstdio>
