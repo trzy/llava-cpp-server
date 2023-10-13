@@ -62,9 +62,19 @@ llama-base:
 	cd llama.cpp && $(MAKE)
 
 #
+# macOS: need to copy ggml-metal.metal to bin/ dir, alongside the binary itself
+#
+ifdef LLAMA_METAL
+bin/ggml-metal.metal: llama.cpp/ggml-metal.metal
+	cp $< $@
+else
+bin/ggml-metal.metal: ;
+endif # LLAMA_METAL
+
+#
 # Build all
 #
-build-all: llama-base obj bin bin/llava-server
+build-all: llama-base bin/ggml-metal.metal obj bin bin/llava-server
 	@echo $(LLAMA_OBJS)
 
 #
