@@ -1,9 +1,9 @@
 /*
  * TODO:
- * - Figure out how to avoid recreating llama_context each inference.
  * - Implement web server options.
  * - Remove thread and queue and just use a mutex (we have to hold up each web request anyway to
  *   return a response).
+ * - Implement response JSON.
  */
 
 #include "web_server.hpp"
@@ -45,16 +45,15 @@ static bool clip_image_load_from_memory(std::shared_ptr<uint8_t[]> image_buffer,
     return true;
 }
 
-static void perform_inference(gpt_params params, llama_model *model, const llama_context_params &ctx_params, clip_ctx *ctx_clip, std::shared_ptr<uint8_t[]> image_buffer, size_t image_buffer_size, const std::string prompt)
+static void perform_inference(
+    gpt_params params,
+    clip_ctx *ctx_clip,
+    llama_context *ctx_llama,
+    std::shared_ptr<uint8_t[]> image_buffer,
+    size_t image_buffer_size,
+    const std::string prompt
+)
 {
-    // create a fresh llama context each time to reset state
-    llama_context * ctx_llama = llama_new_context_with_model(model, ctx_params);
-    if (ctx_llama == NULL)
-    {
-        fprintf(stderr , "%s: error: failed to create the llama_context\n" , __func__);
-        return;
-    }
-
     // load and preprocess the image
     clip_image_u8 img;
     clip_image_f32 img_res;
@@ -108,6 +107,9 @@ static void perform_inference(gpt_params params, llama_model *model, const llama
 
     const int max_tgt_len = params.n_predict < 0 ? 256 : params.n_predict;
 
+    // Clear state
+    llama_kv_cache_tokens_rm(ctx_llama, -1, -1);
+
     // GG: are we sure that the should be a trailing whitespace at the end of this string?
     eval_string(ctx_llama, "A chat between a curious human and an artificial intelligence assistant.  The assistant gives helpful, detailed, and polite answers to the human's questions.\nUSER: ", params.n_batch, &n_past);
     eval_image_embd(ctx_llama, image_embd, n_img_pos, params.n_batch, &n_past);
@@ -131,17 +133,18 @@ static void perform_inference(gpt_params params, llama_model *model, const llama
 
     {
         const float t_img_enc_ms = (t_img_enc_end_us - t_img_enc_start_us) / 1000.0;
-
         printf("\n%s: image encoded in %8.2f ms by CLIP (%8.2f ms per image patch)\n", __func__, t_img_enc_ms, t_img_enc_ms / n_img_pos);
     }
 
     llama_print_timings(ctx_llama);
 
-    llama_free(ctx_llama);
     free(image_embd);
 }
 
-[[noreturn]] static void run_llava_thread(gpt_params params, llama_model *model, const llama_context_params &ctx_params, clip_ctx *ctx_clip)
+[[noreturn]] static void run_llava_thread(
+    gpt_params params,
+    clip_ctx *ctx_clip,
+    llama_context *ctx_llama)
 {
     while (true)
     {
@@ -156,7 +159,7 @@ static void perform_inference(gpt_params params, llama_model *model, const llama
 
         // Perform inference
         std::cout << "Prompt: " << request.prompt << std::endl;
-        perform_inference(params, model, ctx_params, ctx_clip, request.image, request.image_buffer_size, request.prompt);
+        perform_inference(params, ctx_clip, ctx_llama, request.image, request.image_buffer_size, request.prompt);
     }
 }
 
@@ -216,8 +219,16 @@ int main(int argc, char ** argv)
     ctx_params.n_threads       = params.n_threads;
     ctx_params.n_threads_batch = params.n_threads_batch == -1 ? params.n_threads : params.n_threads_batch;
 
+    // create a fresh llama context each time to reset state
+    llama_context * ctx_llama = llama_new_context_with_model(model, ctx_params);
+    if (ctx_llama == NULL)
+    {
+        fprintf(stderr , "%s: error: failed to create the llama_context\n" , __func__);
+        return 1;
+    }
+
     // Start LLaVa thread to process incoming requests
-    std::thread llava_thread(run_llava_thread, params, model, ctx_params, ctx_clip);
+    std::thread llava_thread(run_llava_thread, params, ctx_clip, ctx_llama);
 
     // Serve forever
     run_web_server("localhost", 8080, [](const llava_request &request) { push_to_work_queue(request); });
