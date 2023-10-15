@@ -1,7 +1,6 @@
 /*
  * TODO:
- * - Implement web server options.
- * - Remove thread and queue and just use a mutex (we have to hold up each web request anyway to
+  * - Remove thread and queue and just use a mutex (we have to hold up each web request anyway to
  *   return a response).
  * - Implement response JSON.
  */
@@ -18,6 +17,7 @@
 #include <cstdlib>
 #include <queue>
 #include <thread>
+#include <tuple>
 #include <vector>
 
 static std::queue<llava_request> s_work_queue;
@@ -170,7 +170,7 @@ static void push_to_work_queue(const llava_request &request)
     s_cv.notify_all();
 }
 
-static void show_additional_info(int /*argc*/, char ** argv)
+static void show_additional_info(int /*argc*/, char **argv)
 {
     printf("\n web server options:\n");
     printf("  --host HOST           host to serve on (default: localhost)\n");
@@ -180,13 +180,79 @@ static void show_additional_info(int /*argc*/, char ** argv)
     printf("  note: a lower temperature value like 0.1 is recommended for better quality.\n");
 }
 
+static bool parse_command_line(int argc, char **argv, gpt_params &params, std::string &hostname, int &port)
+{
+    // Convert to vector of strings
+    std::vector<std::string> args;
+    for (int i = 0; i < argc; i++)
+    {
+        args.emplace_back(argv[i]);
+    }
+
+    // First, handle our custom parameters and then remove them
+    hostname = "localhost";
+    port = 8080;
+    for (auto it = args.begin()++; it != args.end(); )
+    {
+        if (*it == "--host" || *it == "--port")
+        {
+            std::string arg = *it;
+            it = args.erase(it);    // remove this element, point to next one
+            if (it == args.end())
+            {
+                fprintf(stderr, "error: %s requires one argument.\n", arg.c_str());
+                return true;
+            }
+            else
+            {
+                if (arg == "--host")
+                {
+                    hostname = *it;
+                }
+                else
+                {
+                    port = std::stoi(*it);
+                }                
+                it = args.erase(it);
+            }
+        }
+        else
+        {
+            ++it;
+        }
+    }
+
+    // Construct new argc, argv with our custom arguments removed
+    int new_argc = args.size();
+    char **new_argv = new char *[new_argc];
+    for (int i = 0; i < new_argc; i++)
+    {
+        new_argv[i] = new char[args[i].size() + 1];
+        memcpy(new_argv[i], args[i].c_str(), args[i].size() + 1);
+    }
+    
+    // Parse using llama.cpp parser
+    bool success = gpt_params_parse(new_argc, new_argv, params);
+
+    // Clean up
+    for (int i = 0; i < new_argc; i++)
+    {
+        delete [] new_argv[i];
+    }
+    delete [] new_argv;
+
+    return success;
+}
+
 int main(int argc, char ** argv)
 {
     ggml_time_init();
 
     gpt_params params;
 
-    if (!gpt_params_parse(argc, argv, params))
+    std::string hostname;
+    int port;
+    if (!parse_command_line(argc, argv, params, hostname, port))
     {
         show_additional_info(argc, argv);
         return 1;
@@ -231,7 +297,7 @@ int main(int argc, char ** argv)
     std::thread llava_thread(run_llava_thread, params, ctx_clip, ctx_llama);
 
     // Serve forever
-    run_web_server("localhost", 8080, [](const llava_request &request) { push_to_work_queue(request); });
+    run_web_server(hostname, port, [](const llava_request &request) { push_to_work_queue(request); });
 
     return 0;
 }

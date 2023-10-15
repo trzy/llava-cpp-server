@@ -16,8 +16,8 @@ using namespace httplib;
 
 const char *html = R"(
 <form id="formElem">
-  <input type="file" name="image_file" accept="image/*">
-  <input type="text" name="text_file" accept="text/*">
+  <span>Prompt: </span><input type="text" name="prompt" accept="text/*"><br>
+  <input type="file" name="image_file" accept="image/*"><br>
   <input type="submit">
 </form>
 <script>
@@ -97,20 +97,9 @@ void run_web_server(const std::string host, int port, std::function<void(const l
 
     svr.Post("/post", [&hand_off_request](const Request &req, Response &res)
     {
-        auto text_file = req.get_header_value("text_file");
-
-        std::cout << "text length: " << text_file.length() << std::endl
-                  << "text: " << text_file << std::endl
-                  << "is_multipart_form: " << req.is_multipart_form_data() << std::endl;
-
-        MultipartFormData data = req.get_file_value("text_file");
-        std::cout << "name: " << data.name << std::endl
-                  << "content: " << data.content << std::endl;
-
+        MultipartFormData prompt = req.get_file_value("prompt");
         MultipartFormData img_data = req.get_file_value("image_file");
-        std::cout << "name: " << img_data.name << std::endl
-                  << "size: " << img_data.content.length() << std::endl;
-
+        
         res.set_content("done", "text/plain");
 
         // Hand off to main thread
@@ -120,7 +109,7 @@ void run_web_server(const std::string host, int port, std::function<void(const l
         llava_request request = {
             .image = std::move(image_buffer),
             .image_buffer_size = image_buffer_size,
-            .prompt = data.content
+            .prompt = prompt.content
         };
         hand_off_request(request);
     });
