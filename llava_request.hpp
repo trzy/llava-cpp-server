@@ -1,3 +1,11 @@
+/*
+ * llava_request.hpp
+ * Bart Trzynadlowski, 2023
+ * 
+ * Encodes a LLaVA query request.
+ */
+
+#pragma once
 #ifndef INCLUDED_LLAVA_REQUEST_HPP
 #define INCLUDED_LLAVA_REQUEST_HPP
 

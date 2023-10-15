@@ -1,8 +1,16 @@
 /*
- * TODO:
-  * - Remove thread and queue and just use a mutex (we have to hold up each web request anyway to
- *   return a response).
- * - Implement response JSON.
+ * llava_server.cpp
+ * Bart Trzynadlowski, 2023
+ * 
+ * Simple LLaVA server. Use /llava endpoint to submit images and prompts. Wraps llama.cpp, which
+ * support LLaVA.
+ * 
+ * Sample usage:
+ * 
+ *      bin/llava-server -m ggml-model-q5_k.gguf --mmproj mmproj-model-f16.gguf --port 8080
+ *
+ * If running on macOS, ensure ggml-metal.metal is present in the same location as the llava-server
+ * binary (i.e., the bin/ directory). You can find this file in llama.cpp/.
  */
 
 #include "web_server.hpp"
@@ -19,10 +27,6 @@
 #include <thread>
 #include <tuple>
 #include <vector>
-
-static std::queue<llava_request> s_work_queue;
-static std::condition_variable s_cv;
-static std::mutex s_mtx;
 
 static bool clip_image_load_from_memory(std::shared_ptr<uint8_t[]> image_buffer, size_t image_buffer_size, clip_image_u8 *img)
 {
@@ -46,26 +50,32 @@ static bool clip_image_load_from_memory(std::shared_ptr<uint8_t[]> image_buffer,
 }
 
 static void perform_inference(
-    gpt_params params,
+    const llava_request &request,
+    httplib::Response &web_response,
+    gpt_params &params,
     clip_ctx *ctx_clip,
-    llama_context *ctx_llama,
-    std::shared_ptr<uint8_t[]> image_buffer,
-    size_t image_buffer_size,
-    const std::string prompt
+    llama_context *ctx_llama
 )
 {
+    std::cout << "Processing request:" << std::endl
+              << "  Prompt: " << request.prompt << std::endl
+              << "  Image : " << request.image_buffer_size << " bytes" << std::endl
+              << std::endl;
+
     // load and preprocess the image
     clip_image_u8 img;
     clip_image_f32 img_res;
 
-    if (!clip_image_load_from_memory(image_buffer, image_buffer_size, &img))
+    if (!clip_image_load_from_memory(request.image, request.image_buffer_size, &img))
     {
+        web_response.set_content("{\"error\": true, \"description\": \"unable to load image\"}", "application/json");
         return;
     }
 
     if (!clip_image_preprocess(ctx_clip, &img, &img_res, /*pad2square =*/ true))
     {
         fprintf(stderr, "%s: unable to preprocess image\n", __func__);
+        web_response.set_content("{\"error\": true, \"description\": \"unable to preprocess image\"}", "application/json");
         return;
     }
 
@@ -77,6 +87,7 @@ static void perform_inference(
     if (!image_embd) 
     {
         fprintf(stderr, "Unable to allocate memory for image embeddings\n");
+        web_response.set_content("{\"error\": true, \"description\": \"unable to allocate memory for image embeddings\"}", "application/json");
         return;
     }
 
@@ -84,6 +95,7 @@ static void perform_inference(
     if (!clip_image_encode(ctx_clip, params.n_threads, &img_res, image_embd))
     {
         fprintf(stderr, "Unable to encode image\n");
+        web_response.set_content("{\"error\": true, \"description\": \"unable to encode image\"}", "application/json");
         return;
     }
     const int64_t t_img_enc_end_us = ggml_time_us();
@@ -93,9 +105,7 @@ static void perform_inference(
     if (n_img_embd != n_llama_embd)
     {
         printf("%s: embedding dim of the multimodal projector (%d) is not equal to that of LLaMA (%d). Make sure that you use the correct mmproj file.\n", __func__, n_img_embd, n_llama_embd);
-
-        // Return error response
-        // ...
+        web_response.set_content("{\"error\": true, \"description\": \"multimodal projector embedding dimensions are not equal to LLaMA, which may indicate the wrong mmproj file is being used\"}", "application/json");
         free(image_embd);
         return;
     }
@@ -113,21 +123,24 @@ static void perform_inference(
     // GG: are we sure that the should be a trailing whitespace at the end of this string?
     eval_string(ctx_llama, "A chat between a curious human and an artificial intelligence assistant.  The assistant gives helpful, detailed, and polite answers to the human's questions.\nUSER: ", params.n_batch, &n_past);
     eval_image_embd(ctx_llama, image_embd, n_img_pos, params.n_batch, &n_past);
-    eval_string(ctx_llama, prompt.c_str(), params.n_batch, &n_past);
+    eval_string(ctx_llama, request.prompt.c_str(), params.n_batch, &n_past);
     eval_string(ctx_llama, "\nASSISTANT:",        params.n_batch, &n_past);
 
     // generate the response
 
     printf("\n");
-
+    std::string output;
     for (int i = 0; i < max_tgt_len; i++)
     {
         const char * tmp = sample(ctx_llama, params, &n_past);
         if (strcmp(tmp, "</s>") == 0) break;
 
+        output += tmp;
         printf("%s", tmp);
         fflush(stdout);
     }
+    
+    web_response.set_content("{\"error\": false, \"content\": \"" + escape_json(output) + "\"}", "application/json");
 
     printf("\n");
 
@@ -141,46 +154,18 @@ static void perform_inference(
     free(image_embd);
 }
 
-[[noreturn]] static void run_llava_thread(
-    gpt_params params,
-    clip_ctx *ctx_clip,
-    llama_context *ctx_llama)
-{
-    while (true)
-    {
-        // Wait until there is something in the queue
-        std::unique_lock lock(s_mtx);
-        s_cv.wait(lock, [] { return !s_work_queue.empty(); });
-        auto request = s_work_queue.front();
-        s_work_queue.pop();
-
-        // Unlock, allowing more items to be enqueued
-        lock.unlock();
-
-        // Perform inference
-        std::cout << "Prompt: " << request.prompt << std::endl;
-        perform_inference(params, ctx_clip, ctx_llama, request.image, request.image_buffer_size, request.prompt);
-    }
-}
-
-static void push_to_work_queue(const llava_request &request)
-{
-    std::unique_lock lock(s_mtx);
-    s_work_queue.emplace(request);
-    s_cv.notify_all();
-}
-
 static void show_additional_info(int /*argc*/, char **argv)
 {
     printf("\n web server options:\n");
     printf("  --host HOST           host to serve on (default: localhost)\n");
     printf("  --port PORT           port to serve on (default: 8080)\n");
+    printf("  --log-http            enable http logging\n");
     printf("\n");
     printf("\n example usage: %s -m <llava-v1.5-7b/ggml-model-q5_k.gguf> --mmproj <llava-v1.5-7b/mmproj-model-f16.gguf> --image <path/to/an/image.jpg> [--temp 0.1] [-p \"describe the image in detail.\"]\n", argv[0]);
     printf("  note: a lower temperature value like 0.1 is recommended for better quality.\n");
 }
 
-static bool parse_command_line(int argc, char **argv, gpt_params &params, std::string &hostname, int &port)
+static bool parse_command_line(int argc, char **argv, gpt_params &params, std::string &hostname, int &port, bool &enable_http_logging)
 {
     // Convert to vector of strings
     std::vector<std::string> args;
@@ -190,8 +175,6 @@ static bool parse_command_line(int argc, char **argv, gpt_params &params, std::s
     }
 
     // First, handle our custom parameters and then remove them
-    hostname = "localhost";
-    port = 8080;
     for (auto it = args.begin()++; it != args.end(); )
     {
         if (*it == "--host" || *it == "--port")
@@ -215,6 +198,11 @@ static bool parse_command_line(int argc, char **argv, gpt_params &params, std::s
                 }                
                 it = args.erase(it);
             }
+        }
+        else if (*it == "--log-http")
+        {
+            enable_http_logging = true;
+            it = args.erase(it);
         }
         else
         {
@@ -250,9 +238,10 @@ int main(int argc, char ** argv)
 
     gpt_params params;
 
-    std::string hostname;
-    int port;
-    if (!parse_command_line(argc, argv, params, hostname, port))
+    std::string hostname = "localhost";
+    int port = 8080;
+    bool enable_http_logging = false;
+    if (!parse_command_line(argc, argv, params, hostname, port, enable_http_logging))
     {
         show_additional_info(argc, argv);
         return 1;
@@ -293,11 +282,15 @@ int main(int argc, char ** argv)
         return 1;
     }
 
-    // Start LLaVa thread to process incoming requests
-    std::thread llava_thread(run_llava_thread, params, ctx_clip, ctx_llama);
-
     // Serve forever
-    run_web_server(hostname, port, [](const llava_request &request) { push_to_work_queue(request); });
+    std::mutex mtx;
+    run_web_server(hostname, port, enable_http_logging,
+        [&mtx, &params, ctx_clip, ctx_llama](const llava_request &request, httplib::Response &response)
+        {
+            std::unique_lock lock(mtx);
+            perform_inference(request, response, params, ctx_clip, ctx_llama);
+        }
+    );
 
     return 0;
 }
