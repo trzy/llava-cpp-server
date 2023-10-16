@@ -276,7 +276,7 @@ int main(int argc, char ** argv)
     ctx_params.n_threads       = params.n_threads;
     ctx_params.n_threads_batch = params.n_threads_batch == -1 ? params.n_threads : params.n_threads_batch;
 
-    // create a fresh llama context each time to reset state
+    // create a llama context once that we'll reuse for each request
     llama_context * ctx_llama = llama_new_context_with_model(model, ctx_params);
     if (ctx_llama == NULL)
     {
