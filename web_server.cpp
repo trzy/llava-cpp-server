@@ -20,21 +20,44 @@
 using namespace httplib;
 
 const char *html = R"(
-<form id="formElem">
-  <span>Prompt: </span><input type="text" name="prompt" accept="text/*"><br>
-  <input type="file" name="image_file" accept="image/*"><br>
-  <input type="submit">
-</form>
-<script>
-  formElem.onsubmit = async (e) => {
-    e.preventDefault();
-    let res = await fetch('/llava', {
-      method: 'POST',
-      body: new FormData(formElem)
-    });
-    console.log(await res.text());
-  };
-</script>
+<html>
+    <head>
+        <title>LLaVA demo</title>
+    </head>
+    <body>
+        <div>
+            <h1>LLaVA Demo</h1>
+        </div>
+        <form id="formElem">
+            <div><span>Prompt: </span><input type="text" name="prompt" accept="text/*"></div>
+            <div><input type="file" name="image_file" accept="image/*"></div>
+            <div><input type="submit"></div>
+            <div><span><b>Response: </b></span><span id="responseElem"></span></div>
+        </form>
+    </body>
+    <script>
+        formElem.onsubmit = async (e) =>
+        {
+            let responseField = document.getElementById("responseElem");
+            responseField.textContent = "";
+            e.preventDefault();
+            let res = await fetch('/llava',
+            {
+                method: 'POST',
+                body: new FormData(formElem)
+            });
+            let data = await res.json();
+            if (data.error)
+            {
+                responseField.textContent = "error: " + data.description;
+            }
+            else
+            {
+                responseField.textContent = data.content;
+            }
+        };
+    </script>
+</html>
 )";
 
 static std::string dump_headers(const Headers &headers)
