@@ -169,28 +169,28 @@ static void show_additional_info(int /*argc*/, char **argv)
 
 static bool parse_command_line(int argc, char **argv, gpt_params &params, std::string &hostname, int &port, bool &enable_http_logging)
 {
-    // Convert to vector of strings
-    std::vector<std::string> args;
+    // Convert to vector
+    std::vector<char *> args;
     for (int i = 0; i < argc; i++)
     {
         args.emplace_back(argv[i]);
     }
 
-    // First, handle our custom parameters and then remove them
+    // First, handle our custom arguments and then remove them
     for (auto it = args.begin()++; it != args.end(); )
     {
-        if (*it == "--host" || *it == "--port")
+        if (!strcmp(*it, "--host") || !strcmp(*it, "--port"))
         {
-            std::string arg = *it;
+            char *arg = *it;
             it = args.erase(it);    // remove this element, point to next one
             if (it == args.end())
             {
-                fprintf(stderr, "error: %s requires one argument.\n", arg.c_str());
+                fprintf(stderr, "error: %s requires one argument.\n", arg);
                 return true;
             }
             else
             {
-                if (arg == "--host")
+                if (!strcmp(arg, "--host"))
                 {
                     hostname = *it;
                 }
@@ -201,7 +201,7 @@ static bool parse_command_line(int argc, char **argv, gpt_params &params, std::s
                 it = args.erase(it);
             }
         }
-        else if (*it == "--log-http")
+        else if (!strcmp(*it, "--log-http"))
         {
             enable_http_logging = true;
             it = args.erase(it);
@@ -217,18 +217,13 @@ static bool parse_command_line(int argc, char **argv, gpt_params &params, std::s
     char **new_argv = new char *[new_argc];
     for (int i = 0; i < new_argc; i++)
     {
-        new_argv[i] = new char[args[i].size() + 1];
-        memcpy(new_argv[i], args[i].c_str(), args[i].size() + 1);
+        new_argv[i] = args[i];
     }
     
     // Parse using llama.cpp parser
     bool success = gpt_params_parse(new_argc, new_argv, params);
 
     // Clean up
-    for (int i = 0; i < new_argc; i++)
-    {
-        delete [] new_argv[i];
-    }
     delete [] new_argv;
 
     return success;
