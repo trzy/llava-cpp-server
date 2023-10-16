@@ -3,6 +3,10 @@
 
 Simple API server for [llama.cpp](https://github.com/ggerganov/llama.cpp) implementation of LLaVA.
 
+<p align="center">
+  <img src="assets/screenshot.png" />
+</p>
+
 ## Usage
 
 Download one of `ggml-model-*.gguf` and `mmproj-model-f16.gguf` from [here](https://huggingface.co/mys/ggml_llava-v1.5-13b/tree/main). Then, simply invoke:

@@ -31,12 +31,32 @@ const char *html = R"(
         <form id="formElem">
             <div><span>System Prompt: </span><input type="text" name="system_prompt" accept="text/*" value="A chat between a curious human and an artificial intelligence assistant.  The assistant gives helpful, detailed, and polite answers to the human's questions."></div>
             <div><span>Prompt: </span><input type="text" name="user_prompt" accept="text/*"></div>
-            <div><input type="file" name="image_file" accept="image/*"></div>
+            <div><input type="file" name="image_file" id="imageField" accept="image/*"></div>
             <div><input type="submit"></div>
-            <div><span><b>Response: </b></span><span id="responseElem"></span></div>
         </form>
+        <div><span><b>Response: </b></span></div>
+        <div id="imageView"></div>
+        <div><span id="responseElem"></span></div>
     </body>
     <script>
+        document.getElementById("imageField").addEventListener("change", handleFileSelect, false);
+        function handleFileSelect(evt)
+        {
+            var files = evt.target.files; 
+            var f = files[0]; 
+            var reader = new FileReader();
+            reader.onload = (
+                function(theFile)
+                { 
+                    return function(e) { 
+                        document.getElementById("imageView").innerHTML = [
+                            '<img src="', e.target.result,'" title="', theFile.name, '" width="500" />'
+                        ].join(""); 
+                    }; 
+                }
+            )(f);
+	        reader.readAsDataURL(f); 
+        }
         formElem.onsubmit = async (e) =>
         {
             let responseField = document.getElementById("responseElem");
