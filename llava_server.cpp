@@ -58,8 +58,9 @@ static void perform_inference(
 )
 {
     std::cout << "Processing request:" << std::endl
-              << "  Prompt: " << request.prompt << std::endl
-              << "  Image : " << request.image_buffer_size << " bytes" << std::endl
+              << "  System prompt: " << request.system_prompt << std::endl
+              << "  User prompt  : " << request.user_prompt << std::endl
+              << "  Image        : " << request.image_buffer_size << " bytes" << std::endl
               << std::endl;
 
     // load and preprocess the image
@@ -121,9 +122,10 @@ static void perform_inference(
     llama_kv_cache_tokens_rm(ctx_llama, -1, -1);
 
     // GG: are we sure that the should be a trailing whitespace at the end of this string?
-    eval_string(ctx_llama, "A chat between a curious human and an artificial intelligence assistant.  The assistant gives helpful, detailed, and polite answers to the human's questions.\nUSER: ", params.n_batch, &n_past);
+    std::string prompt = request.system_prompt + "\nUSER: ";
+    eval_string(ctx_llama, prompt.c_str(), params.n_batch, &n_past);
     eval_image_embd(ctx_llama, image_embd, n_img_pos, params.n_batch, &n_past);
-    eval_string(ctx_llama, request.prompt.c_str(), params.n_batch, &n_past);
+    eval_string(ctx_llama, request.user_prompt.c_str(), params.n_batch, &n_past);
     eval_string(ctx_llama, "\nASSISTANT:",        params.n_batch, &n_past);
 
     // generate the response

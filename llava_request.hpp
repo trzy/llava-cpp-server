@@ -14,7 +14,8 @@
 
 struct llava_request
 {
-    std::string prompt;
+    std::string system_prompt = "A chat between a curious human and an artificial intelligence assistant.  The assistant gives helpful, detailed, and polite answers to the human's questions.";
+    std::string user_prompt;
     std::shared_ptr<uint8_t[]> image;
     size_t image_buffer_size;
 };

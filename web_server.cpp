@@ -29,7 +29,8 @@ const char *html = R"(
             <h1>LLaVA Demo</h1>
         </div>
         <form id="formElem">
-            <div><span>Prompt: </span><input type="text" name="prompt" accept="text/*"></div>
+            <div><span>System Prompt: </span><input type="text" name="system_prompt" accept="text/*" value="A chat between a curious human and an artificial intelligence assistant.  The assistant gives helpful, detailed, and polite answers to the human's questions."></div>
+            <div><span>Prompt: </span><input type="text" name="user_prompt" accept="text/*"></div>
             <div><input type="file" name="image_file" accept="image/*"></div>
             <div><input type="submit"></div>
             <div><span><b>Response: </b></span><span id="responseElem"></span></div>
@@ -171,8 +172,14 @@ void run_web_server(const std::string host, int port, bool enable_logging, std::
 
     svr.Post("/llava", [&hand_off_request](const Request &req, Response &res)
     {
-        MultipartFormData prompt = req.get_file_value("prompt");
+        if (!req.has_file("user_prompt") || !req.has_file("image_file"))
+        {
+            res.set_content("{\"error\": true, \"description\": \"request is missing one or more required fields\"}", "application/json");
+        }
+
+        MultipartFormData user_prompt = req.get_file_value("user_prompt");
         MultipartFormData img_data = req.get_file_value("image_file");
+        MultipartFormData system_prompt = req.get_file_value("system_prompt");  // optional
 
         // Hand off to inference, which must produce a JSON response
         size_t image_buffer_size = img_data.content.length();
@@ -180,10 +187,14 @@ void run_web_server(const std::string host, int port, bool enable_logging, std::
         memcpy(image_buffer.get(), img_data.content.c_str(), image_buffer_size);
         llava_request request = 
         {
+            .user_prompt = user_prompt.content,
             .image = std::move(image_buffer),
-            .image_buffer_size = image_buffer_size,
-            .prompt = prompt.content
+            .image_buffer_size = image_buffer_size
         };
+        if (system_prompt.content.size() > 0)
+        {
+            request.system_prompt = system_prompt.content;
+        }
         hand_off_request(request, res);
     });
 

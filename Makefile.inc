@@ -49,10 +49,10 @@ obj/%.o:	llama.cpp/examples/llava/%.cpp
 #
 # Our modules
 #
-obj/llava_server.o:	llava_server.cpp llama.cpp/examples/llava/llava-utils.h llama.cpp/examples/llava/clip.h llama.cpp/common/stb_image.h
+obj/llava_server.o:	llava_server.cpp llava_request.hpp llama.cpp/examples/llava/llava-utils.h llama.cpp/examples/llava/clip.h llama.cpp/common/stb_image.h
 	$(CXX) -Illama.cpp -Illama.cpp/common -c -o $@ $< $(CXXFLAGS) -I. -std=c++17
 
-obj/web_server.o: web_server.cpp web_server.hpp cpp-httplib/httplib.h
+obj/web_server.o: web_server.cpp web_server.hpp llava_request.hpp cpp-httplib/httplib.h
 	$(CXX) -c -o $@ $< $(HTTP_CXXFLAGS) -I.
 
 #
