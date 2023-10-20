@@ -163,7 +163,7 @@ static void show_additional_info(int /*argc*/, char **argv)
     printf("  --port PORT           port to serve on (default: 8080)\n");
     printf("  --log-http            enable http logging\n");
     printf("\n");
-    printf("\n example usage: %s -m <llava-v1.5-7b/ggml-model-q5_k.gguf> --mmproj <llava-v1.5-7b/mmproj-model-f16.gguf> --image <path/to/an/image.jpg> [--temp 0.1] [-p \"describe the image in detail.\"]\n", argv[0]);
+    printf("\n example usage: %s -m <llava-v1.5-7b/ggml-model-q5_k.gguf> --mmproj <llava-v1.5-7b/mmproj-model-f16.gguf> [--temp 0.1]\n", argv[0]);
     printf("  note: a lower temperature value like 0.1 is recommended for better quality.\n");
 }
 
